@@ -1523,23 +1523,17 @@ class BundleCLI(object):
         ),
     )
     def do_rm_command(self, args):
-        print "args:" , args
         args.bundle_spec = spec_util.expand_specs(args.bundle_spec)
-        print args.worksheet_spec
         client, worksheet_uuid = self.parse_client_worksheet_uuid(args.worksheet_spec)
-        print "client: ", client
-        print "worksheet_uuid: ", worksheet_uuid
         # Resolve all the bundles first, then delete.
         # This is important since some of the bundle specs (^1 ^2) are relative.
         bundle_uuids = self.resolve_bundle_uuids(client, worksheet_uuid, args.bundle_spec)
-        print "bundle_uuids: ", bundle_uuids
         deleted_uuids = client.delete('bundles', bundle_uuids, params={
             'force': args.force,
             'recursive': args.recursive,
             'data-only': args.data_only,
             'dry-run': args.dry_run
         })['meta']['ids']
-        print "deleted_uuids: ",deleted_uuids
         if args.dry_run:
             bundles = client.fetch('bundles', params={
                 'specs': deleted_uuids,
