@@ -118,6 +118,7 @@ BUNDLE_COMMANDS = (
     'kill',
     'write',
     'mount',
+    'ancestors'
 )
 
 DOCKER_IMAGE_COMMANDS = (
@@ -560,6 +561,41 @@ class BundleCLI(object):
             'specs': bundle_specs,
         })
         return [b['id'] for b in bundles]
+
+    
+    def BFS(self,client,worksheet_uuid,bundle_specs,visited_bundles,spaces):
+        bundle_info = self.resolve_bundle_uuids_with_depth(client,worksheet_uuid,bundle_specs)
+        print ' '*spaces+'-'+bundle_info['name']+'('+bundle_info['uuid'][:9]+')'
+        if(visited_bundles.get(bundle_info['name'])):
+            return
+        else:
+            visited_bundles[bundle_info['name']] = bundle_info['uuid']
+            for dep in bundle_info['dependencies']:
+                self.BFS(client,worksheet_uuid,dep['parent_uuid'],visited_bundles,spaces+1)
+
+        return
+
+
+    @staticmethod
+    def resolve_bundle_uuids_with_depth(client,worksheet_uuid,bundle_specs):
+
+        bundle=client.fetch('bundles', params={
+            'worksheet': worksheet_uuid,
+            'specs': bundle_specs,
+            'depth': 0
+            
+        })
+        #print bundle
+        dependency_list = bundle[0]['dependencies']
+        bundle_info = {}
+        bundle_info['uuid'] = bundle[0]['uuid']
+        bundle_info['name'] = bundle[0]['metadata']['name']
+        bundle_info['dependencies'] = dependency_list
+        return bundle_info
+
+
+         
+
 
     @staticmethod
     def resolve_worksheet_uuid(client, base_worksheet_uuid, worksheet_spec):
@@ -1487,18 +1523,23 @@ class BundleCLI(object):
         ),
     )
     def do_rm_command(self, args):
+        print "args:" , args
         args.bundle_spec = spec_util.expand_specs(args.bundle_spec)
+        print args.worksheet_spec
         client, worksheet_uuid = self.parse_client_worksheet_uuid(args.worksheet_spec)
+        print "client: ", client
+        print "worksheet_uuid: ", worksheet_uuid
         # Resolve all the bundles first, then delete.
         # This is important since some of the bundle specs (^1 ^2) are relative.
         bundle_uuids = self.resolve_bundle_uuids(client, worksheet_uuid, args.bundle_spec)
+        print "bundle_uuids: ", bundle_uuids
         deleted_uuids = client.delete('bundles', bundle_uuids, params={
             'force': args.force,
             'recursive': args.recursive,
             'data-only': args.data_only,
             'dry-run': args.dry_run
         })['meta']['ids']
-
+        print "deleted_uuids: ",deleted_uuids
         if args.dry_run:
             bundles = client.fetch('bundles', params={
                 'specs': deleted_uuids,
@@ -1509,6 +1550,24 @@ class BundleCLI(object):
         else:
             for uuid in deleted_uuids:
                 print >>self.stdout, uuid
+
+    @Commands.command(
+        'ancestors',
+        help='Find ancestors of a bundle',
+        arguments=(
+            Commands.Argument('bundle_spec', help=BUNDLE_SPEC_FORMAT, nargs='+', completer=BundlesCompleter),
+            Commands.Argument('-w', '--worksheet-spec', help='Operate on this worksheet (%s).' % WORKSHEET_SPEC_FORMAT, completer=WorksheetsCompleter),
+        )
+    )    
+    def do_ancestors_command(self, args):
+        args.bundle_spec = spec_util.expand_specs(args.bundle_spec)
+        
+        client, worksheet_uuid = self.parse_client_worksheet_uuid(args.worksheet_spec)
+        #print "client: ", client
+        #print "worksheet_uuid: ", worksheet_uuid
+        self.BFS(client,worksheet_uuid,args.bundle_spec,{},0)
+        
+
 
     @Commands.command(
         'search',
